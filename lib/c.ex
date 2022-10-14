@@ -1,4 +1,6 @@
 defmodule Fern.C do
+  alias Fern.AST
+
   # only two "types"
   # 1. scalars
   # - new (*)
@@ -276,7 +278,10 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     {:scalar, "2 * sizeof (var)", "", %{}, %{}, "", depth}
   end
   defp expr({:var, "#" <> type}, _func, _vars, depth) do
-    {:scalar, "sizeof (#{type(Fern.AST.tokenize_type(type))})", "", %{Fern.AST.tokenize_type(type) => true}, %{}, "", depth}
+    {:scalar, "sizeof (#{type(AST.tokenize_type(type))})", "", %{AST.tokenize_type(type) => true}, %{}, "", depth}
+  end
+  defp expr({:var, "?" <> <<x>>}, _func, _vars, depth) do
+    {:scalar, "#{x}", "", %{}, %{}, "", depth}
   end
   defp expr({:var, x}, _func, vars, depth) do
     x = varname(x)
@@ -320,16 +325,16 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
   end
   defp expr({:apply, {:var, "Return" <> type}, [x]}, func, vars, depth) do
     {:scalar, x, pre, types, bvars, funcs, depth} = expr(x, func, vars, depth)
-    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew(sizeof (#{type(Fern.AST.tokenize_type(type))}), &_#{depth * 2}, &_#{depth * 2 + 1});\n*((#{type(Fern.AST.tokenize_type(type))} *) (_#{depth * 2} + 8)) = #{x};\n", types, bvars, funcs, depth + 1}
+    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew(sizeof (#{type(AST.tokenize_type(type))}), &_#{depth * 2}, &_#{depth * 2 + 1});\n*((#{type(AST.tokenize_type(type))} *) (_#{depth * 2} + 8)) = #{x};\n", Map.merge(types, %{AST.tokenize_type(type) => true}), bvars, funcs, depth + 1}
   end
   defp expr({:apply, {:var, "return" <> type}, [x]}, func, vars, depth) do
     {:scalar, x, pre, types, bvars, funcs, depth} = expr(x, func, vars, depth)
-    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew_s(sizeof (#{type(Fern.AST.tokenize_type(type))}), &_#{depth * 2}, &_#{depth * 2 + 1});\n*((#{type(Fern.AST.tokenize_type(type))} *) (_#{depth * 2} + 8)) = #{x};\n", types, bvars, funcs, depth + 1}
+    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew_s(sizeof (#{type(AST.tokenize_type(type))}), &_#{depth * 2}, &_#{depth * 2 + 1});\n*((#{type(AST.tokenize_type(type))} *) (_#{depth * 2} + 8)) = #{x};\n", Map.merge(types, %{AST.tokenize_type(type) => true}), bvars, funcs, depth + 1}
   end
   defp expr({:apply, {:var, "repkg" <> type}, [box, scalar]}, func, vars, depth) do
     {:box, box_ptr, box_ver, box_pre, box_types, box_bvars, box_funcs, depth} = expr(box, func, vars, depth)
     {:scalar, scalar_res, scalar_pre, scalar_types, scalar_bvars, scalar_funcs, depth} = expr(scalar, func, vars, depth)
-    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", box_pre <> "\n" <> scalar_pre <> "\nset#{type(Fern.AST.tokenize_type(type))}(#{box_ptr}, #{box_ver}, 0, #{scalar_res}, &_#{depth * 2}, &_#{depth * 2 + 1});", Map.merge(box_types, scalar_types), Map.merge(box_bvars, scalar_bvars), box_funcs <> "\n" <> scalar_funcs, depth + 1}
+    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", box_pre <> "\n" <> scalar_pre <> "\nset#{type(AST.tokenize_type(type))}(#{box_ptr}, #{box_ver}, 0, #{scalar_res}, &_#{depth * 2}, &_#{depth * 2 + 1});", Map.merge(Map.merge(box_types, scalar_types), %{AST.tokenize_type(type) => true}), Map.merge(box_bvars, scalar_bvars), box_funcs <> "\n" <> scalar_funcs, depth + 1}
   end
   defp expr({:apply, {:var, "del"}, [var]}, func, vars, depth) do
     {:box, ptr, _ver, pre, types, bvars, funcs, depth} = expr(var, func, vars, depth)
@@ -386,11 +391,14 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     {:nothing, pre <> "\nscanf(\"#{fmt}\"#{expr});", types, bvars, funcs, depth}
   end
   defp expr({:apply, {:var, "print"}, [_ | _] = xs}, func, vars, depth) do
-    fmt = List.duplicate("%lu", length(xs)) |> Enum.join(" ")
-    {expr, pre, types, bvars, funcs, depth} = Enum.reduce(xs, {"", "", %{}, %{}, "", depth}, fn cur, {expr, pre, types, bvars, funcs, depth} ->
-      {:scalar, res, this_pre, this_types, this_bvars, this_funcs, this_depth} = expr(cur, func, vars, depth)
-      {expr <> ", (unsigned long) #{res}", pre <> "\n" <> this_pre, Map.merge(types, this_types), Map.merge(bvars, this_bvars), funcs <> "\n" <> this_funcs, max(depth, this_depth)}
+    {expr, pre, types, bvars, funcs, depth, fmt} = Enum.reduce(xs, {"", "", %{}, %{}, "", depth, []}, fn
+      {:var, "%" <> idek}, {expr, pre, types, bvars, funcs, depth, fmt} ->
+        {expr <> ", \"#{idek}\"", pre, types, bvars, funcs, depth, ["%s" | fmt]}
+      cur, {expr, pre, types, bvars, funcs, depth, fmt} ->
+        {:scalar, res, this_pre, this_types, this_bvars, this_funcs, this_depth} = expr(cur, func, vars, depth)
+        {expr <> ", (unsigned long) #{res}", pre <> "\n" <> this_pre, Map.merge(types, this_types), Map.merge(bvars, this_bvars), funcs <> "\n" <> this_funcs, max(depth, this_depth), ["%lu" | fmt]}
     end)
+    fmt = fmt |> Enum.reverse() |> Enum.join(" ")
     {:nothing, pre <> "\nprintf(\"#{fmt}\\n\"#{expr});", types, bvars, funcs, depth}
   end
   defp expr({:apply, {:var, "printstr"}, [_ | _] = xs}, func, vars, depth) do

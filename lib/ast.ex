@@ -26,7 +26,7 @@ defmodule Fern.AST do
   # + -
   # * / % (everything up to here is same as with c)
   # @
-  # @>
+  # @> .
 
   # decent preprocessing is done here to make life easier later on
   # - strip comments
@@ -266,6 +266,9 @@ defmodule Fern.AST do
   defp tk_iffxor("~", a, b), do: {:iff, a, b}
   defp tk_iffxor("^", a, b), do: {:xor, a, b}
 
+  defp apply_extract({:apply, b, c}), do: {b, c}
+  defp apply_extract(x), do: {x, []}
+
   # just to extract that nasty cnt + 1
   defp next(f, line, stack, ret, out, cnt), do: build(f, line, stack, ret, out, cnt + 1)
 
@@ -499,7 +502,7 @@ defmodule Fern.AST do
             end
           {:apply, [], xs} ->
             [x | xs] = (xs)
-            next(f, line, tl(stack), {:apply, x, xs}, out, cnt)
+            next(f, line, tl(stack), {:apply, x, List.delete(xs, :null)}, out, cnt)
           {:apply, [unariable | unariables], xs} ->
             if ret do
               next(f, line, [{:apply, unariables, [ret | xs]} | tl(stack)], nil, out, cnt)
@@ -519,35 +522,67 @@ defmodule Fern.AST do
                     next(f, line, [{:apply, xs, []} | stack], ret, out, cnt)
                 end
             end
-          {:set, [], ret, [], []} ->
+          {:setpipe, [], ret, [], []} ->
             next(f, line, tl(stack), ret, out, cnt)
-          {:set, [], ret, xs, ops} ->
-            ["@>" <> type | ops] = ops
-            type = tokenize_type(type)
-            [{:apply, b, [c]} | xs] = xs
-            next(f, line, [{:set, [], {:set, type, ret, b, c}, xs, ops} | tl(stack)], ret, out, cnt)
-          {:set, [], xs, ops} ->
-            ["@>" <> type | ops] = Enum.reverse(ops)
-            type = tokenize_type(type)
-            [a, {:apply, b, [c]} | xs] = (xs)
-            next(f, line, [{:set, [], {:set, type, a, b, c}, xs, ops} | tl(stack)], ret, out, cnt)
-          {:set, [part | parts], xs, ops} ->
+          {:setpipe, [], ret, xs, ops} ->
+            [op | ops] = ops
+            case op do
+              "@>" <> type ->
+                type = tokenize_type(type)
+                [{:apply, b, [c]} | xs] = xs
+                next(f, line, [{:setpipe, [], {:set, type, ret, b, c}, xs, ops} | tl(stack)], ret, out, cnt)
+              ".." ->
+                [b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, c ++ [ret]}, xs, ops} | tl(stack)], ret, out, cnt)
+              "." ->
+                [b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, [ret | c]}, xs, ops} | tl(stack)], ret, out, cnt)
+              "." <> idx ->
+                idx = String.to_integer(idx)
+                [b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, List.insert_at(c, idx, ret)}, xs, ops} | tl(stack)], ret, out, cnt)
+            end
+          {:setpipe, [], xs, ops} ->
+            [op | ops] = Enum.reverse(ops)
+            case op do
+              "@>" <> type ->
+                type = tokenize_type(type)
+                [a, {:apply, b, [c]} | xs] = xs
+                next(f, line, [{:setpipe, [], {:set, type, a, b, c}, xs, ops} | tl(stack)], ret, out, cnt)
+              ".." ->
+                [a, b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, c ++ [a]}, xs, ops} | tl(stack)], ret, out, cnt)
+              "." ->
+                [a, b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, [a | c]}, xs, ops} | tl(stack)], ret, out, cnt)
+              "." <> idx ->
+                idx = String.to_integer(idx)
+                [a, b | xs] = xs
+                {b, c} = apply_extract(b)
+                next(f, line, [{:setpipe, [], {:apply, b, List.insert_at(c, idx, a)}, xs, ops} | tl(stack)], ret, out, cnt)
+            end
+          {:setpipe, [part | parts], xs, ops} ->
             if ret do
-              next(f, line, [{:set, parts, [ret | xs], ops} | tl(stack)], nil, out, cnt)
+              next(f, line, [{:setpipe, parts, [ret | xs], ops} | tl(stack)], nil, out, cnt)
             else
               next(f, line, [{:apply, part, []} | stack], ret, out, cnt)
             end
-          {:set, str, xs, ops} ->
+          {:setpipe, str, xs, ops} ->
             [_ | stack] = stack
-            case get_part(str, ~r/@>.*/) do
+            case get_part(str, ~r/@>.*|\..*/) do
               {x, op, rst} ->
-                next(f, line, [{:set, rst, [x | xs], [op | ops]} | stack], ret, out, cnt)
+                next(f, line, [{:setpipe, rst, [x | xs], [op | ops]} | stack], ret, out, cnt)
               x ->
                 case [x | xs] do
                   [x] ->
                     next(f, line, [{:apply, x, []} | stack], ret, out, cnt)
                   xs ->
-                    next(f, line, [{:set, xs, [], ops} | stack], ret, out, cnt)
+                    next(f, line, [{:setpipe, xs, [], ops} | stack], ret, out, cnt)
                 end
             end
           {:get, [], ret, [], []} ->
@@ -567,7 +602,7 @@ defmodule Fern.AST do
             if ret do
               next(f, line, [{:get, parts, [ret | xs], ops} | tl(stack)], nil, out, cnt)
             else
-              next(f, line, [{:set, part, [], []} | stack], ret, out, cnt)
+              next(f, line, [{:setpipe, part, [], []} | stack], ret, out, cnt)
             end
           {:get, str, xs, ops} ->
             [_ | stack] = stack
@@ -577,7 +612,7 @@ defmodule Fern.AST do
               x ->
                 case [x | xs] do
                   [x] ->
-                    next(f, line, [{:set, x, [], []} | stack], ret, out, cnt)
+                    next(f, line, [{:setpipe, x, [], []} | stack], ret, out, cnt)
                   xs ->
                     next(f, line, [{:get, xs, [], ops} | stack], ret, out, cnt)
                 end
