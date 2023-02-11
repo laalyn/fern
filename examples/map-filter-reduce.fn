@@ -1,0 +1,48 @@
+map <- {
+  i n arr fn; i. = n. ->
+    arr
+  i n arr fn ->
+    arr <- fn i arr
+    $ (repkg i (i. + 1)) n arr fn
+  n arr fn ->
+    i <- return 0
+    arr <- $ i n arr fn
+    ss &i
+    arr
+}
+
+filter <- {
+  i n oarr cmp setter res cond; i. = n. ->
+    oarr
+  i n oarr cmp setter res cond ->
+    res <- cmp i (getbox oarr #b) res
+    oarr <- cond i oarr setter res
+    $ (repkg i (i. + 1)) n oarr cmp setter res cond
+  n arr cmp setter ->
+    ret <- setbox (setbox (new (#b * 2)) 0 (return 0)) #b arr
+    cond <- {
+      i oarr setter res; res.1 ->
+        oarr <- setbox oarr #b (setter i (getbox oarr 0) (getbox oarr #b))
+        setbox oarr 0 (repkg (getbox oarr 0) ((getbox oarr 0). + 1))
+      i oarr setter res ->
+        oarr
+    }
+    ret <- $ (return 0) n ret cmp setter (new #1) cond
+    ss &cond
+    ret
+}
+
+reduce <- {
+  i n acc fn; i. = n. ->
+    acc
+  i n acc fn ->
+    acc <- fn i acc
+    $ (repkg i (i. + 1)) n acc fn
+  n acc fn ->
+    i <- return 0
+    acc <- $ i n acc fn
+    ss &i
+    acc
+}
+
+0

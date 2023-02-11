@@ -1,0 +1,68 @@
+map <- {
+  i n arr fn; i. = n. ->
+    arr
+  i n arr fn ->
+    arr <- fn i arr
+    $ (repkg i (i. + 1)) n arr fn
+  n arr fn ->
+    i <- return 0
+    arr <- $ i n arr fn
+    ss &i
+    arr
+}
+
+---
+
+nr <- new #
+nc <- new #
+scan! nr nc
+arr <- map (return (nr. * nc.)) (New (# * nr. * nc.)) {i arr ->
+  n <- new #
+  scan! n
+  arr <- arr @> (# * i.) n.
+  ss &n
+  arr
+}
+vis <- map (return (nr. * nc.)) (New (nr. * nc.)) {i arr ->
+  arr @>1 i. 0
+}
+
+dfs <- {
+  r c vis; r. < 0 | c. < 0 | r. >= nr. | c. >= nc. | /(arr @ (# * nc. * r. + # * c.)) | vis @1 (nc. * r. + c.) ->
+    vis
+  r c vis ->
+    f <- new 0
+    vis <- (
+      vis @>1 (nc. * r. + c.) 1
+      .. $ (return (r. - 1)) c
+      .. $ (return (r. + 1)) c
+      .. $ r (return (c. - 1))
+      .. $ r (return (c. + 1))
+    )
+    ss &f
+    vis
+}
+
+cnt <- {
+  r cnt vis; r. = nr. ->
+    cnt
+  r cnt vis ->
+    f <- new 0
+    tup2 <- {
+      c cnt vis; c. = nc. ->
+        new (#b * 2) . setbox 0 cnt . setbox #b vis
+      c cnt vis; /(arr @ (# * nc. * r. + # * c.)) | vis @1 (nc. * r. + c.) ->
+        $ (repkg c (c. + 1)) cnt vis
+      c cnt vis ->
+        vis <- dfs r c vis
+        $ (repkg c (c. + 1)) (repkg cnt (cnt. + 1)) vis
+    } (return 0) cnt vis
+    cnt <- getbox tup2 0
+    vis <- getbox tup2 #b
+    ss &f
+    $ (repkg r (r. + 1)) cnt vis
+} (return 0) (return 0) vis
+
+print cnt.
+
+0

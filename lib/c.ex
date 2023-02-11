@@ -63,19 +63,26 @@ typedef unsigned long var;
 #{injected}
 void new(var size, var *ptr, var *ver) {
   var new = (var) malloc(8 + size);
+#ifndef UNSAFE
   *((var *) new) = 0;
+#endif
   *ptr = new;
+#ifndef UNSAFE
   *ver = 0;
+#endif
 }
 #{typed}
 var getvar(var ptr, var ver, var ofs) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"getvar version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
   }
+#endif
   return *((var *) (ptr + 8 + ofs));
 }
 void setvar(var ptr, var ver, var ofs, var val, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"setvar version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
@@ -85,19 +92,27 @@ void setvar(var ptr, var ver, var ofs, var val, var *ptro, var *vero) {
     abort();
   }
   (*((var *) ptr))++;
+#endif
   *((var *) (ptr + 8 + ofs)) = val;
   *ptro = ptr;
+#ifndef UNSAFE
   *vero = ver + 1;
+#endif
 }
 void getbox(var ptr, var ver, var ofs, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"getbox version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
   }
+#endif
   *ptro = *((var *) (ptr + 8 + ofs));
+#ifndef UNSAFE
   *vero = *((var *) (ptr + 8 + ofs + sizeof (var)));
+#endif
 }
 void setbox(var ptr, var ver, var ofs, var val_ptr, var val_ofs, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"setbox version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
@@ -107,12 +122,18 @@ void setbox(var ptr, var ver, var ofs, var val_ptr, var val_ofs, var *ptro, var 
     abort();
   }
   (*((var *) ptr))++;
+#endif
   *((var *) (ptr + 8 + ofs)) = val_ptr;
+#ifndef UNSAFE
   *((var *) (ptr + 8 + ofs + sizeof (var))) = val_ofs;
+#endif
   *ptro = ptr;
+#ifndef UNSAFE
   *vero = ver + 1;
+#endif
 }
 var cpy_s(var size, var ptr, var ver, var ofs, var scalar, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"cpy_s version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
@@ -122,11 +143,15 @@ var cpy_s(var size, var ptr, var ver, var ofs, var scalar, var *ptro, var *vero)
     abort();
   }
   (*((var *) ptr))++;
+#endif
   memcpy((void *) (ptr + 8 + ofs), &scalar, size);
   *ptro = ptr;
+#ifndef UNSAFE
   *vero = ver + 1;
+#endif
 }
 var cpy_b(var size, var ptr, var ver, var ofs, var box_ptr, var box_ver, var box_ofs, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"cpy_b version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
@@ -140,33 +165,44 @@ var cpy_b(var size, var ptr, var ver, var ofs, var box_ptr, var box_ver, var box
     abort();
   }
   (*((var *) ptr))++;
+#endif
   memcpy((void *) (ptr + 8 + ofs), (void *) (box_ptr + 8 + box_ofs), size);
   *ptro = ptr;
+#ifndef UNSAFE
   *vero = ver + 1;
+#endif
 }
 var ptrassert(var ptr, var ver) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"ptrassert version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
   }
+#endif
   return ptr;
 }
 var _sptr, _spos;
 #define STACK_SIZE #{System.get_env("STACK_SIZE")}
 void new_s(var size, var *ptr, var *ver) {
+#ifndef UNSAFE
   if (_spos + 8 + size > STACK_SIZE) {
     fputs(\"new_s stack overflow\\n\", stderr);
     abort();
   }
+#endif
   *ptr = _sptr + _spos;
+#ifndef UNSAFE
   *((var *) (*ptr)) = 0;
   *ver = 0;
+#endif
   _spos += 8 + size;
 }
+#{psgetvars()}
 #{funcs}
 int main(int argc, char **argv) {
   _sptr = (var) malloc(STACK_SIZE);
   _spos = 0;
+#{shift(psgetsts(), 2)}
 #{shift(mainc, 2)}
 }
 "
@@ -184,13 +220,16 @@ int main(int argc, char **argv) {
             |> Enum.join("\n")
     typed = Enum.map(typelist, fn cur ->
       "#{ctype(cur)} get#{type(cur)}(var ptr, var ver, var ofs) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"get#{type(cur)} version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
   }
+#endif
   return *((#{type(cur)} *) (ptr + 8 + ofs));
 }
 void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var *vero) {
+#ifndef UNSAFE
   if (*((var *) ptr) != ver) {
     fprintf(stderr, \"set#{type(cur)} version mismatch %lu %lu\\n\", *((var *) ptr), ver);
     abort();
@@ -200,9 +239,12 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     abort();
   }
   (*((var *) ptr))++;
+#endif
   *((#{type(cur)} *) (ptr + 8 + ofs)) = val;
   *ptro = ptr;
+#ifndef UNSAFE
   *vero = ver + 1;
+#endif
 }"
     end)
     |> Enum.join("\n")
@@ -319,6 +361,11 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     {:scalar, size, pre, types, bvars, funcs, depth} = expr(size, func, vars, depth)
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew(#{size}, &_#{depth * 2}, &_#{depth * 2 + 1});", types, bvars, funcs, depth + 1}
   end
+  # for now force a constant
+  defp expr({:apply, {:var, "new*"}, [{:const, size}]}, _func, _vars, depth) do
+    var = psadv("8 + #{size}")
+    {:box, var, "0", "#ifndef UNSAFE\n*((var *) #{var}) = 0;\n#endif", %{}, %{}, "", depth}
+  end
   defp expr({:apply, {:var, "new"}, [size]}, func, vars, depth) do
     {:scalar, size, pre, types, bvars, funcs, depth} = expr(size, func, vars, depth)
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew_s(#{size}, &_#{depth * 2}, &_#{depth * 2 + 1});", types, bvars, funcs, depth + 1}
@@ -326,6 +373,11 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
   defp expr({:apply, {:var, "Return" <> type}, [x]}, func, vars, depth) do
     {:scalar, x, pre, types, bvars, funcs, depth} = expr(x, func, vars, depth)
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", pre <> "\nnew(sizeof (#{type(AST.tokenize_type(type))}), &_#{depth * 2}, &_#{depth * 2 + 1});\n*((#{type(AST.tokenize_type(type))} *) (_#{depth * 2} + 8)) = #{x};\n", Map.merge(types, %{AST.tokenize_type(type) => true}), bvars, funcs, depth + 1}
+  end
+  defp expr({:apply, {:var, "return*" <> type}, [x]}, func, vars, depth) do
+    {:scalar, x, pre, types, bvars, funcs, depth} = expr(x, func, vars, depth)
+    var = psadv("8 + sizeof (#{type(AST.tokenize_type(type))})")
+    {:box, var, 0, pre <> "#ifndef UNSAFE\n*((var *) #{var}) = 0;\n#endif\n*((#{type(AST.tokenize_type(type))} *) (#{var} + 8)) = #{x};\n", Map.merge(types, %{AST.tokenize_type(type) => true}), bvars, funcs, depth}
   end
   defp expr({:apply, {:var, "return" <> type}, [x]}, func, vars, depth) do
     {:scalar, x, pre, types, bvars, funcs, depth} = expr(x, func, vars, depth)
@@ -419,10 +471,14 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     funcs = Enum.join(Enum.reverse(funcs), "\n")
     {:box, "*_ptr", "*_ver", pre <> "\n#{func}#{length(xs)}(#{args}, _func, _ptr, _ver);", types, bvars, funcs, depth}
   end
+  defp expr({:apply, {:var, "Fn*"}, [{:func, xs}]}, _, vars, depth) do
+    {prepre, pre, types, funcs, bvars, this_depth} = cases(xs, "_#{Enum.random(0..4294967295)}func", :pin, depth)
+    depth = max(depth, this_depth)
+    {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", prepre <> "\n" <> pre, types, Map.drop(bvars, Enum.map(vars, &elem(&1, 0))), funcs, depth + 1}
+  end
   defp expr({:apply, {:var, "Fn"}, [{:func, xs}]}, _, vars, depth) do
     {prepre, pre, types, funcs, bvars, this_depth} = cases(xs, "_#{Enum.random(0..4294967295)}func", :heap, depth)
     depth = max(depth, this_depth)
-    IO.puts "FN_FUNC WRITTEN DEPTH AS #{depth * 2}"
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", prepre <> "\n" <> pre, types, Map.drop(bvars, Enum.map(vars, &elem(&1, 0))), funcs, depth + 1}
   end
   defp expr({:apply, var, xs}, func, vars, depth) do
@@ -563,13 +619,11 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
   defp expr({:funca_h, xs}, _, vars, depth) do
     {prepre, pre, types, funcs, bvars, this_depth} = cases(xs, "_#{Enum.random(0..4294967295)}func", :heap, depth)
     depth = max(depth, this_depth)
-    IO.puts "FUNCA_H WRITTEN DEPTH AS #{depth * 2}"
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", prepre, pre, types, Map.drop(bvars, Enum.map(vars, &elem(&1, 0))), funcs, depth + 1}
   end
   defp expr({:funca, xs}, _, vars, depth) do
     {prepre, pre, types, funcs, bvars, this_depth} = cases(xs, "_#{Enum.random(0..4294967295)}func", :stack, depth)
     depth = max(depth, this_depth)
-    IO.puts "FUNCA WRITTEN DEPTH AS #{depth * 2}"
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", prepre, pre, types, Map.drop(bvars, Enum.map(vars, &elem(&1, 0))), funcs, depth + 1}
   end
   defp expr({:func, xs}, _, vars, depth) do
@@ -580,7 +634,6 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     {prepre, pre, types, funcs, bvars, this_depth} = cases(xs, "_#{Enum.random(0..4294967295)}func", :stack, depth)
     depth = max(depth, this_depth)
     # FIXME yes I am aware depth is scuffed
-    IO.puts "FUNC WRITTEN DEPTH AS #{depth * 2}"
     {:box, "_#{depth * 2}", "_#{depth * 2 + 1}", prepre <> "\n" <> pre, types, Map.drop(bvars, Enum.map(vars, &elem(&1, 0))), funcs, depth + 1}
   end
   defp expr(ast, func, vars), do: expr(ast, func, vars, 0)
@@ -597,14 +650,16 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     bvars_og = bvars
     bvars = Enum.map(bvars, &elem(&1, 0))
     out = Enum.map(out, &(&1))
-    alloc = case alloc do
+    prepre = case alloc do
       :stack ->
-        "new_s"
+        "new_s(#{(max_arity + 1) * 8 + length(bvars) * 16}, &_#{max_depth * 2}, &_#{max_depth * 2 + 1});"
       :heap ->
-        "new"
+        "new(#{(max_arity + 1) * 8 + length(bvars) * 16}, &_#{max_depth * 2}, &_#{max_depth * 2 + 1});"
+      :pin ->
+        # TODO can we avoid using the max_depth here?
+        var = psadv("8 + #{(max_arity + 1) * 8 + length(bvars) * 16}")
+        "#ifndef UNSAFE\n*((var *) #{var}) = 0;\n#endif\n_#{max_depth * 2} = #{var};\n#ifndef UNSAFE\n_#{max_depth * 2 + 1} = 0;\n#endif"
     end
-    IO.puts "why is max_depth #{max_depth} ??"
-    prepre = "#{alloc}(#{(max_arity + 1) * 8 + length(bvars) * 16}, &_#{max_depth * 2}, &_#{max_depth * 2 + 1});"
     pre = Enum.join(Enum.map(out, fn {arity, _} ->
       "*((var *) (_#{max_depth * 2} + #{8 + arity * 8})) = (var) &#{name}#{arity};"
     end), "\n") <> "\n" <> Enum.join(Enum.map(Enum.with_index(bvars), fn {x, i} ->
@@ -703,6 +758,57 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     {var, pre <> "\n#{var}_ptr = #{ptr};\n#{var}_ver = #{ver};", types, bvars, funcs, max_depth}
   end
 
+  defp psadv(size) do
+    send :pins, {:next, size, self()}
+    receive do
+      {:pinstore, :next, x} ->
+        x
+    end
+  end
+
+  defp psgetvars() do
+    send :pins, {:pull, :vars, self()}
+    receive do
+      {:pinstore, :pull, :vars, x} ->
+        x
+    end
+  end
+
+  defp psgetsts() do
+    send :pins, {:pull, :sts, self()}
+    receive do
+      {:pinstore, :pull, :sts, x} ->
+        x
+    end
+  end
+
+  defp pinstore(n, vars, sts) do
+    receive do
+      {:next, size, to} ->
+        send to, {:pinstore, :next, "_p#{n}"}
+        pinstore(n + 1, ["_p#{n}" | vars], ["_p#{n} = (var) malloc(#{size});" | sts])
+      {:pull, :vars, to} when vars == [] ->
+        send to, {:pinstore, :pull, :vars, ""}
+        pinstore(n, vars, sts)
+      {:pull, :vars, to} ->
+        vars = vars
+               |> Enum.reverse()
+               |> Enum.join(", ")
+        send to, {:pinstore, :pull, :vars, "var #{vars};"}
+        pinstore(n, vars, sts)
+      {:pull, :sts, to} ->
+        sts = sts
+              |> Enum.reverse()
+              |> Enum.join("\n")
+        send to, {:pinstore, :pull, :sts, sts}
+        pinstore(n, vars, sts)
+      _ ->
+        raise "[store] unknown message"
+    end
+  end
+
+  defp pinstore(), do: pinstore(0, [], [])
+
   def compile(ast) do
     # file:
     # - needs base code
@@ -729,6 +835,9 @@ void set#{type(cur)}(var ptr, var ver, var ofs, #{type(cur)} val, var *ptro, var
     # - tmpvars
     # - bake table in function
     # - function level vars
+
+    spawn(fn -> pinstore() end)
+    |> Process.register(:pins)
 
     out = file(ast)
     File.write!("out.c", out, [:write])

@@ -8,7 +8,7 @@ defmodule Fern.CLI do
             case args do
               [src_path] ->
                 src_path
-                |> Fern.AST.parse()
+                |> Fern.AST.parsefile()
                 |> Fern.C.compile()
               _ ->
                 raise "compile expects one source path"
@@ -17,7 +17,7 @@ defmodule Fern.CLI do
             raise "unknown command"
         end
       [] ->
-        raise "what do you want me to do?"
+        Fern.Shell.start()
     end
   end
 end
